@@ -9,7 +9,6 @@ const GLOBALS = {
 
 class Sim {
     constructor() {
-        this.sim_id;
         this.scene;
         this.camera;
         this.renderer;
@@ -20,7 +19,6 @@ class Sim {
 
         this.coils = [];
         this.selectedCoil;
-        this.nextCoilId = 1;
 
         this.fieldData;
         this.forceData;
@@ -40,7 +38,7 @@ class Sim {
         this.dOffset = new THREE.Vector3();
 
         this.settings = {
-            vectorScale: 1,
+            vectorScale: 1.0,
             showGrid: true,
             showForces: true
         }
@@ -94,19 +92,6 @@ class Sim {
                 localStorage.removeItem("sim_id");
             })
         }
-
-        fetch(SERVER_URL + "/simulate")
-        .then(response => response.json())
-        .then(data => {
-            this.sim_id = data.sim_id;
-            localStorage.setItem("sim_id", this.sim_id);
-            this.totFrames = data.frames;
-            console.log("Simulation data:", data);
-        })
-        .catch(error => {
-            console.error("Error fetching simulation data:", error);
-        });
-
     }
 
     setupEventListeners(){
@@ -127,7 +112,6 @@ class Sim {
         document.getElementById('del-button').addEventListener('click', () => this.reset());
         document.getElementById('pprbtn').addEventListener('click', () => this.togglePPR())
         document.getElementById('timeline').addEventListener('input', (e) => this.onTimeLC(e))
-        document.getElementById('save').addEventListener('click', () => this.updateCParam());
 
         this.setParamListeners()
 
@@ -160,7 +144,9 @@ class Sim {
                 var val = parseFloat(e.target.value)
                 valD.textContent = val
 
-                console.log("Param change:", par, val)
+                if (this.selectedCoil){
+                    this.updateCParam()
+                }
             })
         })
     }
@@ -186,20 +172,12 @@ class Sim {
                 case 'pp': coil.phase = parseFloat(valD.textContent); break;
             }            
         })
-
-        fetch(SERVER_URL + `/simulate/${this.sim_id}/edit`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(coil)
-        })
-        .then(response => { if (response.ok) return response.json(); throw new Error("Failed to edit coil");})
-
-
         this.updateCMesh(coil);
     }
 
     addCoil(){
         var coil = {
+            id: this.coils.length > 0 ? Math.max(...this.coils.map(c => c.id)) + 1 : 1,
             position: [0, 0, 0],
             radius: 1.0,
             angle: 0,
@@ -209,58 +187,36 @@ class Sim {
             frequency: 1,
             phase: 0
         }
-
-        fetch(SERVER_URL + `/simulate/${this.sim_id}/add`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(coil)
-        }).then(response => { if (response.ok) return response.json(); throw new Error("Failed to add coil"); })
-        .then(data => {
-            coil.id = parseInt(data.coil_id)
-            this.coils.push(coil);
-            this.createCMesh(coil);
-            this.updateCList();
-            this.updateStatus()
-        })
-
-
+        this.coils.push(coil);
+        this.createCMesh(coil);
+        this.updateCList();
+        this.updateStatus()
     }
 
     removeCoil(coil_id){
-        fetch(SERVER_URL + `/simulate/${this.sim_id}/remove`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({cID: coil_id})
-        }).then(response => { 
-            if (!response.ok)  {
-                alert("Failed to remove coil. Please try again.");
-                throw new Error("Failed to remove coil"); 
-            } else{
-                this.coils = this.coils.filter(c => c.id !== coil_id)
-                var mesh = this.coilMeshes.get(coil_id);
-                if (mesh){
-                    this.scene.remove(mesh);
-                    mesh.geometry.dispose()
-                    mesh.material.dispose()
-                    this.coilMeshes.delete(coil_id)
-                }
+        this.coils = this.coils.filter(c => c.id !== coil_id)
+        this.coils.forEach((c, ind) => c.id = ind + 1)
+        var mesh = this.coilMeshes.get(coil_id);
+        if (mesh){
+            this.scene.remove(mesh);
+            mesh.geometry.dispose()
+            mesh.material.dispose()
+            this.coilMeshes.delete(coil_id)
+        }
 
-                const arr = this.forceArr.get(coil_id)
-                if (arr){
-                    this.scene.remove(arr)
-                    this.forceArr.delete(coil_id)
-                }
+        const arr = this.forceArr.get(coil_id)
+        if (arr){
+            this.scene.remove(arr)
+            this.forceArr.delete(coil_id)
+        }
 
-                if (this.selectedCoil?.id === coil_id) {
-                    this.selectedCoil = null;
-                    document.getElementById('coils-params').style.display = 'none'
-                }
+        if (this.selectedCoil?.id === coil_id) {
+            this.selectedCoil = null;
+            document.getElementById('coils-params').style.display = 'none'
+        }
 
-                this.updateCList();
-                this.updateStatus()
-            }
-        })
-
+        this.updateCList();
+        this.updateStatus()
         
     }
 
@@ -365,11 +321,12 @@ class Sim {
 
         try {
             const reqD = {
+                coils: this.coils,
                 limits: GLOBALS.gridSize,
                 points: GLOBALS.gridPoints,
             }
 
-            const res = await fetch(SERVER_URL + '/simulate/' + this.sim_id + '/run', {
+            const res = await fetch(SERVER_URL + '/simulate/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(reqD)
@@ -378,8 +335,11 @@ class Sim {
             if (!res.ok) throw new Error('Calculation failed');
 
             const data = await res.json()
+            var saved = JSON.parse(localStorage.getItem('saved_sims') || '[]');
+            saved.push(data.sim_id);
+            localStorage.setItem('saved_sims', JSON.stringify(saved));
             this.fieldData = data.B
-            this.forceData = data.forces
+            this.forceData = data.forces // {coil_id: (frames, 3)})
 
             this.totFrames = this.fieldData.length
             this.curFrame = 0;
@@ -464,10 +424,9 @@ class Sim {
             const arrow = new THREE.ArrowHelper(
                 new THREE.Vector3(0, 1, 0),
                 new THREE.Vector3(...coil.position),
-                1,
+                0.000001,
                 0xff0000,
-                0.3,
-                0.2
+                0.03,
             );
             arrow.visible = this.settings.showForces;
             this.scene.add(arrow);
@@ -511,7 +470,7 @@ class Sim {
             dir.normalize();
 
             quatr.setFromUnitVectors(upp, dir);
-            const sc = 0.1;
+            const sc = Math.min(mg, 0.5);
             matr.compose(pos, quatr, new THREE.Vector3(sc, sc, sc))
             this.vectorF.setMatrixAt(i, matr)
 
@@ -534,7 +493,7 @@ class Sim {
 
             var [Fx, Fy, Fz] = forV[this.curFrame]
             let forc = new THREE.Vector3(Fx, Fy, Fz)
-            var mag = forc.length()
+            var mag = forc.length() * this.settings.vectorScale
 
             if (mag < 1e-20){
                 arr.visible = false;
@@ -544,7 +503,7 @@ class Sim {
             forc.normalize()
             arr.position.set(...coil.position);
             arr.setDirection(forc)
-            arr.setLength(Math.min(mag * this.settings.vectorScale, 0.5))
+            arr.setLength(Math.min(mag, 0.5))
             arr.visible = this.settings.showForces;
         })
     }
