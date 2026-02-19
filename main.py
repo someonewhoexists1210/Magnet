@@ -25,7 +25,10 @@ class Coil:
         self.x, self.y, self.z = position
         self.max_current = current
         self.frequency = frequency
-        self.current = self.max_current * np.sin(2 * np.pi * frequency * np.linspace(0, 1, frames) + np.radians(phase))
+        if self.frequency == 0:
+            self.current = np.full(frames, self.max_current)
+        else:
+            self.current = self.max_current * np.sin(2 * np.pi * frequency * np.linspace(0, 1, frames) + np.radians(phase))
         self.layers = layers
         self.coil_length = loops * 0.01
         self.angle = np.radians(angle)
@@ -67,9 +70,10 @@ class Coil:
         return dl
 
     # Calculate magnetic field at given points across time frames
-    def B_calculator(self, points_array: np.ndarray, Ngrid: tuple) -> np.ndarray:
+    def B_calculator(self, points_array: np.ndarray) -> np.ndarray:
         distance_vector = points_array[:, None, :] - self.r[None, :, :] # (Nx*Ny*Nz, Nseg*Nloops, 3)
         ln = np.linalg.norm(distance_vector, axis=2)
+        print("Min distance:", np.min(ln))
         distance_vector[ln < 1e-5] = 0
 
         B = np.cross(self.dl[None, :, :], distance_vector) # (Nx*Ny*Nz, Nseg*Nloops, 3)
@@ -133,11 +137,10 @@ class Simulation:
 
         per_c = {}
         for id, coil in self.coils.items():
-            calresB = coil.B_calculator(self.COORDS, self.Ngrid)  # (frames, Npts, 3)
+            calresB = coil.B_calculator(self.COORDS)  # (frames, Npts, 3)
 
             # add only B field
             self.external_B[..., 3:] += calresB
-
             calresF = calresB.reshape(
                 frames,
                 self.Ngrid[0],
@@ -194,15 +197,13 @@ def simulate():
     glimit = data.get('limits', 1.0)
     gpoints = data.get('points', 10)
     coils = data.get('coils', [])
-    print(coils[1]['phase'])
 
     sim = Simulation(random.randint(1000, 9999), limits=glimit, points=gpoints, coils={c['id']: Coil(**c) for c in coils})
     active_sims[sim.id] = sim
-    print([c.current for c in sim.coils.values()])
     
     B, forces = sim.run()
-    B[..., 3:] *= 1e4
-    forces = {id: [[float(f) * 1e4 for f in frame] for frame in frames] for id, frames in forces.items()}
+    B[..., 3:] *= 1e5
+    forces = {id: [[float(f) * 1e5 for f in frame] for frame in frames] for id, frames in forces.items()}
     r = jsonify({
         "sim_id": sim.id,
         "B": B.tolist(),

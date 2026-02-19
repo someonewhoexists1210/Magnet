@@ -1,8 +1,8 @@
 const SERVER_URL = "http://localhost:5500/api"
 const GLOBALS = {
     sim: null,
-    gridPoints: 5,
-    gridSize: 2.0,
+    gridPoints: 10,
+    gridSize: 1.0,
     dP: {px: 2, py: 2, pz: 2, pra: 2, pag: 1, pl: 0, ply: 0, pc: 2, pf: 0, pp: 0},
     loopThickness: 0.01
 }
@@ -39,6 +39,7 @@ class Sim {
 
         this.settings = {
             vectorScale: 1.0,
+            showVectors: true,
             showGrid: true,
             showForces: true
         }
@@ -82,16 +83,6 @@ class Sim {
         
         const axesHelper = new THREE.AxesHelper(2);
         this.scene.add(axesHelper);
-
-
-        let temp = localStorage.getItem("sim_id");
-        if (temp) {
-            fetch(SERVER_URL + `/simulate/${temp}/delete`, { method: 'POST' })
-            .then(() => {
-                console.log("Deleted old simulation with id:", temp);
-                localStorage.removeItem("sim_id");
-            })
-        }
     }
 
     setupEventListeners(){
@@ -125,6 +116,11 @@ class Sim {
         document.getElementById('sg').addEventListener('change', (e) => {
             this.settings.showGrid = e.target.checked;
             this.gridHelper.visible = e.target.checked
+        })
+
+        document.getElementById('sv').addEventListener('change', (e) => {
+            this.settings.showVectors = e.target.checked;
+            if (this.vectorF) this.vectorF.visible = e.target.checked;
         })
 
         document.getElementById('sf').addEventListener('change', (e) => {
@@ -173,6 +169,7 @@ class Sim {
             }            
         })
         this.updateCMesh(coil);
+        this.reset()
     }
 
     addCoil(){
@@ -217,6 +214,7 @@ class Sim {
 
         this.updateCList();
         this.updateStatus()
+        this.reset()
         
     }
 
@@ -252,7 +250,7 @@ class Sim {
     }
 
     createCMesh(coil) {
-        const geometry = new THREE.TorusGeometry(coil.radius, GLOBALS.loopThickness, 16, 32);
+        const geometry = new THREE.TorusGeometry(coil.radius, GLOBALS.loopThickness, 16, 64);
         const material = new THREE.MeshStandardMaterial({
             color: 0x4CAF50,
             metalness: 0.7,
@@ -293,7 +291,7 @@ class Sim {
             
             item.innerHTML = `
                 <div class="coil-header">
-                    <span class="coil-name">${ind + 1}</span>
+                    <span class="coil-name">Coil ${ind + 1}</span>
                     <div class="coil-actions">
                         <button class="icon-button" onclick="GLOBALS.sim.selectC(GLOBALS.sim.coils.find(c => c.id === ${coil.id}))">Edit</button>
                         <button class="icon-button" onclick="GLOBALS.sim.removeCoil(${coil.id})">Del</button>
@@ -351,6 +349,9 @@ class Sim {
 
             this.updateFrame(0)
             this.updateStatus()
+
+            if (this.playing) this.togglePPR();
+            this.togglePPR();
         } catch (error){
             console.error("Error during field calculation:", error);
             alert("An error occurred during calculation. Please try again.");
@@ -383,6 +384,7 @@ class Sim {
         )
 
         this.scene.add(this.vectorF)
+        this.vectorF.visible = this.settings.showVectors;
     }
 
     createArrGeometry() {
@@ -426,7 +428,7 @@ class Sim {
                 new THREE.Vector3(...coil.position),
                 0.000001,
                 0xff0000,
-                0.03,
+                0.06,
             );
             arrow.visible = this.settings.showForces;
             this.scene.add(arrow);
@@ -470,7 +472,7 @@ class Sim {
             dir.normalize();
 
             quatr.setFromUnitVectors(upp, dir);
-            const sc = Math.min(mg, 0.5);
+            const sc = Math.min(mg, 0.2);
             matr.compose(pos, quatr, new THREE.Vector3(sc, sc, sc))
             this.vectorF.setMatrixAt(i, matr)
 
@@ -478,6 +480,7 @@ class Sim {
         })
 
         this.vectorF.instanceMatrix.needsUpdate = true;
+        this.vectorF.visible = this.settings.showVectors;
         document.getElementById('v-count').textContent = visible
     }
 
@@ -503,7 +506,7 @@ class Sim {
             forc.normalize()
             arr.position.set(...coil.position);
             arr.setDirection(forc)
-            arr.setLength(Math.min(mag, 0.5))
+            arr.setLength(Math.min(mag, 0.2))
             arr.visible = this.settings.showForces;
         })
     }
@@ -650,3 +653,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('pras').min = (GLOBALS.gridSize / GLOBALS.gridPoints);
     document.getElementById('pras').max = GLOBALS.gridSize;
 })
+
+window.addEventListener('beforeunload', () => {
+    GLOBALS.sim.reset();
+    var saved = JSON.parse(localStorage.getItem('saved_sims') || '[]');
+    saved.forEach(sim_id => fetch(SERVER_URL + `/simulate/${sim_id}/delete`, { method: 'POST' }))
+    localStorage.removeItem('saved_sims');
+});

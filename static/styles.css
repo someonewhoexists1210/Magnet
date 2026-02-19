@@ -1,0 +1,330 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow: hidden;
+    background: #1a1a1a;
+    color: #fff;
+}
+
+#container {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+}
+
+#canvas {
+    width: 100%;
+    height: 100%;
+}
+
+/* Control Panel */
+#control {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 20px;
+    border-radius: 10px;
+    max-width: 350px;
+    max-height: 90vh;
+    overflow-y: auto;
+    backdrop-filter: blur(10px);
+}
+
+.control-subpart {
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #444;
+}
+
+.control-subpart:last-child {
+    border-bottom: none;
+}
+
+.subpart-title {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    color: #4CAF50;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.button {
+    width: 100%;
+    padding: 12px;
+    margin: 5px 0;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    transition: all 0.3s;
+    text-transform: uppercase;
+}
+
+.button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.button-primary {
+    background: #4CAF50;
+    color: white;
+}
+
+.button-danger {
+    background: #f44336;
+    color: white;
+}
+
+.button-secondary {
+    background: #2196F3;
+    color: white;
+}
+
+.button:disabled {
+    background: #555;
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+/* Coil List */
+.coil-item {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 15px;
+    margin: 10px 0;
+    border-radius: 5px;
+    border-left: 4px solid #4CAF50;
+}
+
+.coil-item.selected {
+    border-left-color: #FFC107;
+    background: rgba(255, 193, 7, 0.1);
+}
+
+.coil-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.coil-name {
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.coil-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.icon-button {
+    background: none;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 3px;
+    transition: background 0.2s;
+}
+
+.icon-button:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Parameter Controls */
+.param-control {
+    margin: 10px 0;
+}
+
+.p-label {
+    display: block;
+    font-size: 12px;
+    margin-bottom: 5px;
+    color: #aaa;
+}
+
+/* .param-control input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #444;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    font-size: 14px;
+} */
+
+input[type="range"] {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: #444;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #4CAF50;
+    cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #4CAF50;
+    cursor: pointer;
+    border: none;
+}
+
+.p-value {
+    display: inline-block;
+    margin-left: auto;
+    color: #4CAF50;
+    font-weight: bold;
+}
+
+/* Animation Controls */
+#anim-cont {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    padding: 15px 30px;
+    border-radius: 30px;
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    backdrop-filter: blur(10px);
+}
+
+.anim-but {
+    background: none;
+    border: 2px solid #4CAF50;
+    color: #4CAF50;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 20px;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.anim-but:hover {
+    background: #4CAF50;
+    color: #000;
+}
+
+.anim-but.active {
+    background: #4CAF50;
+    color: #000;
+}
+
+#timeline {
+    width: 300px;
+    margin: 0 15px;
+}
+
+.frame-info {
+    color: #aaa;
+    font-size: 12px;
+    min-width: 100px;
+    text-align: center;
+}
+
+/* Status Display */
+#status {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 15px;
+    border-radius: 10px;
+    min-width: 200px;
+    backdrop-filter: blur(10px);
+}
+
+.st-it {
+    display: flex;
+    justify-content: space-between;
+    margin: 8px 0;
+    font-size: 13px;
+}
+
+.st-la {
+    color: #aaa;
+}
+
+.st-va {
+    color: #4CAF50;
+    font-weight: bold;
+}
+
+.l-oy {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.l-oy.hidden {
+    display: none;
+}
+
+.spinner {
+    border: 4px solid #444;
+    border-top: 4px solid #4CAF50;
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.l-text {
+    margin-top: 20px;
+    font-size: 16px;
+    color: #4CAF50;
+}
+
+#control::-webkit-scrollbar {
+    width: 8px;
+}
+
+#control::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+#control::-webkit-scrollbar-thumb {
+    background: #4CAF50;
+    border-radius: 4px;
+}
