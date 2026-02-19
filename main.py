@@ -11,39 +11,30 @@ CORS(app, resources={"*": {"origins": "*"}})
 # GLOBAL VARIABLES
 muθ = 4 * np.pi * 1e-7   # vacuum permeability
 Nseg = 20               # number of wire segments
-frames = 100              # number of time frames
+frames = 30              # number of time frames
 
-x_limits = (-0.5, 0.5)   
-y_limits = (-0.5, 0.5)
-z_limits = (-0.5, 0.5)
-Ngrid = (5, 5, 5)
-
-# Generating a grid in the XZ plane (Y=0)
-x_values = np.linspace(x_limits[0], x_limits[1], Ngrid[0])
-y_values = np.linspace(y_limits[0], y_limits[1], Ngrid[1])
-z_values = np.linspace(z_limits[0], z_limits[1], Ngrid[2])
-
-X, Y, Z = np.meshgrid(x_values, y_values, z_values, indexing='ij')
-COORDS = np.column_stack((X.ravel(), Y.ravel(), Z.ravel()))
 
 # Coil class definition
 class Coil:
-    def __init__(self, radius: float, Nloops: int, coordinate=(0, 0, 0), I=1.00, frequency=1.0, phase=0.0,
-                 layers=1, coil_length=0.1, angle=0.00, **kwargs):
+    def __init__(self, radius: float, loops: int, position=(0, 0, 0), current=1.00, frequency=1.0, phase=0.0,
+                 layers=1, angle=0.00, **kwargs):
         
         self.radius = radius
-        self.loops = Nloops
-        self.x, self.y, self.z = coordinate
-        self.max_current = I
+        self.loops = loops
+        self.x, self.y, self.z = position
+        self.max_current = current
         self.frequency = frequency
         self.current = self.max_current * np.sin(2 * np.pi * frequency * np.linspace(0, 1, frames) + phase)
         self.layers = layers
-        self.coil_length = coil_length
-        self.angle = angle
+        self.coil_length = loops * 0.01
+        self.angle = np.deg2rad(angle)
         self.cross_sectional_area = 2 * np.pi * radius**2
-        self.rotation_matrix = np.array([[np.cos(angle), 0, np.sin(angle)],
+
+        c = np.cos(self.angle)
+        s = np.sin(self.angle)
+        self.rotation_matrix = np.array([[c, 0, s],
                                           [0, 1, 0],
-                                          [-np.sin(angle), 0, np.cos(angle)]]) if angle != 0 else np.eye(3)
+                                          [-s, 0, c]]) if self.angle != 0 else np.eye(3)
         self.to_fixed = lambda array: self.rotation_matrix @ array
 
         self.theta = np.linspace(0, 2*np.pi, Nseg, endpoint=False)
@@ -64,7 +55,7 @@ class Coil:
 
         r = r @ self.rotation_matrix.T
         r += np.array([self.x, self.y, self.z])
-        return r
+        return r # (Nseg * Nloops, 3)
 
     # Compute tangent vectors for wire segments
     def compute_tangent_vectors(self):
@@ -76,29 +67,28 @@ class Coil:
         return dl
 
     # Calculate magnetic field at given points across time frames
-    def B_calculator(self, points_array: np.ndarray) -> np.ndarray:
-        distance_vector = points_array[:, None, :] - self.r[None, :, :] 
-        print(distance_vector.shape)
+    def B_calculator(self, points_array: np.ndarray, Ngrid: tuple) -> np.ndarray:
+        distance_vector = points_array[:, None, :] - self.r[None, :, :] # (Nx*Ny*Nz, Nseg*Nloops, 3)
         ln = np.linalg.norm(distance_vector, axis=2)
         distance_vector[ln < 1e-5] = 0
 
-        B = np.cross(self.dl[None, :, :], distance_vector)
+        B = np.cross(self.dl[None, :, :], distance_vector) # (Nx*Ny*Nz, Nseg*Nloops, 3)
         denom = (ln**2 + self.cross_sectional_area**2)**(3/2)
         B /= denom[:, :, None]
         B *= self.layers * muθ / (4 * np.pi)
-        B = np.sum(B, axis=1)
+        B = np.sum(B, axis=1) # (Nx*Ny*Nz, 3)
 
-        B_time = self.current[:, None, None] * B[None, :, :]
-        B_coil_grid = B_time.reshape(frames, Ngrid[0], Ngrid[1], Ngrid[2], 3).astype(np.float32)
+        B_time = self.current[:, None, None] * B[None, :, :] # (frames, Nx*Ny*Nz, 3)
 
-        return B_coil_grid # (frames, Nx, Ny, Nz, 3)
+        return B_time
     
-    def force_on_coil(self, external_B: np.ndarray) -> np.ndarray:
-        # external_B shape: (frames, Nx, Nz, 3)
+    def force_on_coil(self, external_B: np.ndarray, vals: tuple) -> np.ndarray:
+        # external_B shape: (frames, Nx, Ny, Nz, 3)
         # self.dl shape: (Nseg * Nloops, 3)
         # self.current shape: (frames,)
         B_on_wire = np.zeros((frames, Nseg * self.loops, 3), dtype=np.float32)
         
+        x_values, y_values, z_values = vals
         for t in range(frames):
             interp = RegularGridInterpolator(
                 (x_values, y_values, z_values),
@@ -111,12 +101,18 @@ class Coil:
         # df.shape (frames, Nseg * Nloops, 3)
         df = self.current[:, None, None] * np.cross(self.dl[None, :, :], B_on_wire)
         force = np.sum(df, axis=1)
+        force = force.tolist()
         return force # (frames, 3)
 
 class Simulation:
     def __init__(self, id):
         self.id = id
-        self.coils = {}
+        self.coils = {1: Coil(radius=0.5, loops=5, position=(0, 0, 0), current=1.00, frequency=1.0, phase=0.0,
+                                    layers=1, coil_length=0.1, angle=0.00)}
+        del self.coils[1]
+        self.Ngrid = (10, 10, 10)
+        self.COORDS = np.zeros((self.Ngrid[0] * self.Ngrid[1] * self.Ngrid[2], 3), dtype=np.float32)
+        self.vals = (None, None, None)
 
     def add_coil(self, coil: Coil):
         coil_id = random.randint(1000, 9999)
@@ -139,39 +135,117 @@ class Simulation:
         return False
 
     def run(self):
-        self.external_B = np.zeros((frames, Ngrid[0], Ngrid[1], Ngrid[2], 3), dtype=np.float32)
-        for coil in self.coils:
-            self.external_B += coil.B_calculator(COORDS)
-        
-        forces = [coil.force_on_coil(self.external_B) for coil in self.coils]
+        self.external_B = np.zeros((frames, self.COORDS.shape[0], 6))
+        toFextB = np.zeros((frames, self.Ngrid[0], self.Ngrid[1], self.Ngrid[2], 3))
+
+        # set coordinates once
+        exp_coords = np.broadcast_to(
+            self.COORDS,
+            (frames, *self.COORDS.shape)
+        )
+        self.external_B[..., :3] = exp_coords
+
+        per_c = {}
+        for id, coil in self.coils.items():
+            calresB = coil.B_calculator(self.COORDS, self.Ngrid)  # (frames, Npts, 3)
+
+            # add only B field
+            self.external_B[..., 3:] += calresB
+
+            calresF = calresB.reshape(
+                frames,
+                self.Ngrid[0],
+                self.Ngrid[1],
+                self.Ngrid[2],
+                3
+            )
+            per_c[id] = calresF
+
+            toFextB += calresF
+
+        forces = {
+            id: coil.force_on_coil(toFextB - per_c[id], self.vals)
+            for id, coil in self.coils.items()
+        }
+
         return self.external_B, forces
+
     
-active_sims = {}
+active_sims = {1: Simulation(1)}
+del active_sims[1]
+
 @app.route('/', methods=['GET'])
 def index():
-    return render_template('index.html')
+    return render_template('/index.html')
 
-@app.route('/api/simulate', methods=['POST'])
+@app.route('/api/simulate', methods=['GET'])
 def create_simulation():
     id = random.randint(1000, 9999)
     while id in active_sims:
         id = random.randint(1000, 9999)
     
     active_sims[id] = Simulation(id)
-    return jsonify({'sim_id': id}), 200
+    return jsonify({'sim_id': id, 'frames': frames}), 200
 
-@app.route("/api/simulate/<sim_id>", methods=['POST'])
-def simulate(sim_id):
+@app.route("/api/simulate/<sim_id>", methods=['GET'])
+def get_simulation(sim_id):
     sim_id = int(sim_id)
     if sim_id not in active_sims:
         return jsonify({"error": "Simulation not found"}), 404
     
     sim = active_sims[sim_id]
-    B, forces = sim.run()
     return jsonify({
+        "sim_id": sim.id,
+        "coils": [{
+            "coil_id": coil_id,
+            "radius": coil.radius,
+            "loops": coil.loops,
+            "coordinate": (coil.x, coil.y, coil.z),
+            "current": coil.max_current,
+            "frequency": coil.frequency,
+            "phase": 0.0,
+            "layers": coil.layers,
+            "coil_length": coil.coil_length,
+            "angle": coil.angle
+        } for coil_id, coil in sim.coils.items()]
+        }), 200
+
+@app.route("/api/simulate/<sim_id>/run", methods=['POST'])
+def simulate(sim_id):
+    sim_id = int(sim_id)
+
+    data = request.get_json()
+    glimit = data.get('limits', 1.0)
+    gpoints = data.get('points', 10)
+    Ngrid = (gpoints, gpoints, gpoints)
+
+    # Generating a grid in the XZ plane (Y=0)
+    x_values = np.linspace(-glimit, glimit, Ngrid[0])
+    y_values = np.linspace(-glimit, glimit, Ngrid[1])
+    z_values = np.linspace(-glimit, glimit, Ngrid[2])
+
+    X, Y, Z = np.meshgrid(x_values, y_values, z_values, indexing='ij')
+    COORDS = np.column_stack((X.ravel(), Y.ravel(), Z.ravel())) # (Nx*Ny*Nz, 3)
+    
+    if sim_id not in active_sims:
+        return jsonify({"error": "Simulation not found"}), 404
+    
+    sim = active_sims[sim_id]
+    sim.COORDS = COORDS
+    sim.Ngrid = Ngrid
+    sim.vals = (x_values, y_values, z_values)
+    
+    B, forces = sim.run()
+    print("MAX before multiply:", np.max(np.abs(B[..., 3:])))
+    B[..., 3:] *= 1e2
+    print("MAX before jsonify:", np.max(np.abs(B[..., 3:])))
+    print("MIN before jsonify:", np.min(np.abs(B[..., 3:])))
+    r = jsonify({
         "B": B.tolist(),
-        "forces": [force.tolist() for force in forces]
+        "forces": forces
     })
+    
+    return r
 
 @app.route("/api/simulate/<sim_id>/add", methods=['POST'])
 def add_coil(sim_id):
@@ -186,10 +260,11 @@ def add_coil(sim_id):
 
     return jsonify({'coil_id': coil_id}), 200
 
-@app.route("/api/simulate/<sim_id>/<coil_id>/remove", methods=['POST'])
-def remove_coil(sim_id, coil_id):
+@app.route("/api/simulate/<sim_id>/remove", methods=['POST'])
+def remove_coil(sim_id):
     sim_id = int(sim_id)
-    coil_id = int(coil_id)
+    request_data = request.get_json()
+    coil_id = request_data.get('cID')
     if sim_id not in active_sims:
         return jsonify({"error": "Simulation not found"}), 404
     
@@ -202,26 +277,37 @@ def remove_coil(sim_id, coil_id):
         return jsonify({"message": "Coil removed successfully"}), 200
     return jsonify({"error": "Failed to remove coil"}), 500
 
-@app.route("/api/simulate/<sim_id>/<coil_id>/edit", methods=['POST'])
-def edit_coil(sim_id, coil_id):
+@app.route("/api/simulate/<sim_id>/edit", methods=['POST'])
+def edit_coil(sim_id):
     sim_id = int(sim_id)
-    coil_id = int(coil_id)
     if sim_id not in active_sims:
         return jsonify({"error": "Simulation not found"}), 404
     
     sim = active_sims[sim_id]
+    coil_data = request.get_json()
+    print(coil_data)
+    coil_id = coil_data['id']
+
     if coil_id not in sim.coils:
         return jsonify({"error": "Coil not found"}), 404
     
-    coil_data = request.get_json()
     new_coil = Coil(**coil_data)
     successful = sim.edit_coil(coil_id, new_coil)
     if successful:
         return jsonify({"message": "Coil edited successfully"}), 200
     return jsonify({"error": "Failed to edit coil"}), 500
 
+@app.route('/api/simulate/<sim_id>/delete', methods=['POST'])
+def delete_sim(sim_id):
+    sim_id = int(sim_id)
+    if sim_id not in active_sims:
+        return jsonify({"error": "Simulation not found"}), 404
+    
+    del active_sims[sim_id]
+    return jsonify({"message": "Simulation deleted successfully"}), 200
+
 HOST = '0.0.0.0'
 PORT = 5500
 if __name__ == '__main__':
-    app.run(host=HOST, port=PORT)
+    app.run(host=HOST, port=PORT, debug=True)
     

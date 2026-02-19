@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magneto Simulator</title>
+    <link rel="stylesheet" href="../static/styles.css">
+</head>
+<body>
+    <script src="../static/main.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <div id="container">
+        <div id="canvas"></div>
+
+        <div id="control">
+            <div class="control subpart">
+                <div class="subpart-title">Simulation Controls</div>
+                <button class="button button-primary" id="calc-button">Calculate Field</button>
+                <button class="button button-danger" id="del-button">Reset Simulation</button>
+            </div>
+
+            <div class="control subpart">
+                <div class="subpart-title">Coils</div>
+                <button class="button button-secondary" id="add-coil">Add Coil</button>
+                <div id="coil-list"></div>
+            </div>
+
+            <div class="control subpart" id="coils-params" style="display: none">
+                <div class="subpart-title">Coil Params</div>
+
+                <div class="param-control">
+                    <label class="p-label">
+                        Position X <span class="p-value" id="px">0.0</span>
+                    </label>
+                    <input type="range" class='coord' id="pxs" min="-1.0" max="1.0" step="0.01" value="0">
+                </div>
+                <div class="param-control">
+                    <label class="p-label">
+                        Position Y <span class="p-value" id="py">0.0</span>
+                    </label>
+                    <input type="range" id="pys" class='coord' min="-1.0" max="1.0" step="0.01" value="0">
+                </div>
+                <div class="param-control">
+                    <label class="p-label">
+                        Position Z <span class="p-value" id="pz">0.0</span>
+                    </label>
+                    <input type="range" id="pzs" class='coord' min="-1.0" max="1.0" step="0.01" value="0">
+                </div>
+
+                <div class="param-control">
+                    <label class="p-label">
+                        Radius <span class="p-value" id="pra">1.0</span>
+                    </label>
+                    <input type="range" id="pras" min="0.01" max="2.0" step="0.01" value="1">
+                </div>
+
+                <div class="param-control">
+                    <label class="p-label">
+                        Angle ° <span class="p-value" id="pag">0</span>
+                    </label>
+                    <input type="range" id="pags" min="0" max="359" step="1" value="0">
+                </div>
+
+                <div class="param-control">
+                    <label class="p-label">
+                        Loops <span class="p-value" id="pl">0</span>
+                    </label>
+                    <input type="range" id="pls" min="1" max="20" step="1" value="1">
+                </div>
+
+                <div class="param-control">
+                    <label class="p-label">
+                        Layers <span class="p-value" id="ply">0</span>
+                    </label>
+                    <input type="range" id="plys" min="1" max="10" step="1" value="1">
+                </div>
+
+                <div class="param-control">
+                    <label class="p-label">
+                        Current (A)<span class="p-value" id="pc">1.0</span>
+                    </label>
+                    <input type="range" id="pcs" min="0.1" max="5" step="0.1" value="1">
+                </div>
+
+                <div class="param-control">
+                    <label class="p-label">
+                        Frequency <span class="p-value" id="pf">0</span>
+                    </label>
+                    <input type="range" id="pfs" min="1" max="10" step="1" value="1">
+                </div>
+
+                <div class="param-control">
+                    <label class="p-label">
+                        Phase ° <span class="p-value" id="pp">0</span>
+                    </label>
+                    <input type="range" id="pps" min="0" max="359" step="1" value="0">
+                </div>
+
+                <input id="save" type="button" class="button button-success" value="Save Coil">
+                
+            </div>
+
+            <div class="control subpart">
+                <div class="subpart-title">Visual Settings</div>
+
+                <div class="param-control">
+                    <label class="p-label">
+                        Vector Scale <span class="p-value" id="pvs">0</span>
+                    </label>
+                    <input type="range" id="pvss" min="0.1" max="5" step="0.1" value="1">
+                </div>
+
+                <div class="param-control">
+                    <label class="p-label">
+                        <input type="checkbox" id="sg" checked> Show Grid
+                    </label>
+                </div>
+
+                <div class="param-control">
+                    <label class="p-label">
+                        <input type="checkbox" id="sf" checked> Show Force Vs
+                    </label>
+                </div>
+
+            </div>
+
+        </div>
+
+        <div id="anim-cont">
+            <button class="anim-but" id="pprbtn" title="Play/Pause">&#23F5</button>
+            <input type="range" id="timeline" min="0" max="100" step="1" value="0">
+
+            <div class="frame-info">
+                Frame: <span id="currf">0</span> / <span id="totalf">0</span>
+            </div>
+        </div>
+
+        <div id="status">
+            <div class="st-it">
+                <span class="st-la">Coils:</span>
+                <span class="st-va" id="coil-count">0</span>
+            </div>
+            <div class="st-it">
+                <span class="st-la">Vectors:</span>
+                <span class="st-va" id="v-count">0</span>
+            </div>
+        </div>
+
+        <div id="loading" class="l-oy hidden">
+            <div class="spinner"></div>
+            <div class="l-text">Doing some magic..</div>
+        </div>
+        
+    </div>
+
+
+</body>
