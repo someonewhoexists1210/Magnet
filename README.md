@@ -3,6 +3,9 @@
 # Magneto Sim
 A browser based 3D open-source magnetic field and force simulator for multiple coils
 
+Visit [https://darshj.pythonanywhere.com/](https://darshj.pythonanywhere.com/)!
+(note that running the calculation may take upto 20 seconds for simulations with many coils, so try to keep the number of coils and loops low)
+
 ## Features
 * Add and edit multiple coils
 * Adjustable coil parameters, including:
