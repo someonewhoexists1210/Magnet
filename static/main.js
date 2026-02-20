@@ -1,6 +1,6 @@
 const GLOBALS = {
     sim: null,
-    gridPoints: 20,
+    gridPoints: 10,
     gridSize: 2.0,
     dP: {px: 2, py: 2, pz: 2, pra: 2, pag: 1, pl: 0, ply: 0, pc: 2, pf: 0, pp: 0},
     loopThickness: 0.01
@@ -192,11 +192,20 @@ class Sim {
     removeCoil(coil_id){
         this.coils = this.coils.filter(c => c.id !== coil_id)
         this.coils.forEach((c, ind) => c.id = ind + 1)
-        var mesh = this.coilMeshes.get(coil_id);
-        if (mesh){
-            this.scene.remove(mesh);
-            mesh.geometry.dispose()
-            mesh.material.dispose()
+        var grp = this.coilMeshes.get(coil_id);
+        if (grp){
+            this.scene.remove(grp);
+            grp.traverse(mesh => {
+                if (!mesh.isMesh) return;
+                if (mesh.geometry) mesh.geometry.dispose();
+                if (mesh.material) {
+                    if (Array.isArray(mesh.material)) {
+                        mesh.material.forEach(m => m.dispose());
+                    } else {
+                        mesh.material.dispose();
+                    }
+                }
+            })
             this.coilMeshes.delete(coil_id)
         }
 
