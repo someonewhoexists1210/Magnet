@@ -30,7 +30,7 @@ class Coil:
         else:
             self.current = self.max_current * np.sin(2 * np.pi * frequency * np.linspace(0, 1, frames) + np.radians(phase))
         self.layers = layers
-        self.coil_length = loops * 0.01
+        self.coil_length = 0.025 * loops
         self.angle = np.radians(angle)
 
         c = np.cos(self.angle)
@@ -73,8 +73,7 @@ class Coil:
     def B_calculator(self, points_array: np.ndarray) -> np.ndarray:
         distance_vector = points_array[:, None, :] - self.r[None, :, :] # (Nx*Ny*Nz, Nseg*Nloops, 3)
         ln = np.linalg.norm(distance_vector, axis=2)
-        print("Min distance:", np.min(ln))
-        distance_vector[ln < 1e-5] = 0
+        distance_vector[ln < 1e-4] = 0
 
         B = np.cross(self.dl[None, :, :], distance_vector) # (Nx*Ny*Nz, Nseg*Nloops, 3)
         denom = (ln**2 + 1e-6)**(3/2)
@@ -220,9 +219,3 @@ def delete_sim(sim_id):
     
     del active_sims[sim_id]
     return jsonify({"message": "Simulation deleted successfully"}), 200
-
-HOST = '0.0.0.0'
-PORT = 5500
-if __name__ == '__main__':
-    app.run(host=HOST, port=PORT, debug=True)
-    

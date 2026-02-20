@@ -1,8 +1,7 @@
-const SERVER_URL = "http://localhost:5500/api"
 const GLOBALS = {
     sim: null,
-    gridPoints: 10,
-    gridSize: 1.0,
+    gridPoints: 20,
+    gridSize: 2.0,
     dP: {px: 2, py: 2, pz: 2, pra: 2, pag: 1, pl: 0, ply: 0, pc: 2, pf: 0, pp: 0},
     loopThickness: 0.01
 }
@@ -246,10 +245,22 @@ class Sim {
 
         this.updateCList()
 
-        this.coilMeshes.forEach((mesh,id) => mesh.material.emissive.set((id == coil.id) ? 0x444444:0x000000))
+        this.coilMeshes.forEach((group, id) => {
+            let selected = (id == coil.id)
+            group.traverse(obj => {
+                if (!obj.isMesh) return;
+                
+                if (obj.material && obj.material.emissive) {
+                    obj.material.emissive.set((id == coil.id) ? 0x444444:0x000000)
+                }
+            })
+        })
     }
 
     createCMesh(coil) {
+        const grp = new THREE.Group()
+        const spacing = 2.5 * GLOBALS.loopThickness;
+
         const geometry = new THREE.TorusGeometry(coil.radius, GLOBALS.loopThickness, 16, 64);
         const material = new THREE.MeshStandardMaterial({
             color: 0x4CAF50,
@@ -257,27 +268,33 @@ class Sim {
             roughness: 0.3
         });
         
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.set(...coil.position);
-        mesh.rotation.y = THREE.MathUtils.degToRad(coil.angle);
-        mesh.userData.coilId = coil.id;
+        for (let i = 0; i < coil.loops; i++) {
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.z = (i - (coil.loops - 1) / 2) * spacing;
+            grp.add(mesh)
+        }
+
+        grp.position.set(...coil.position);
+        grp.rotation.y = THREE.MathUtils.degToRad(coil.angle);
+        grp.userData.coilId = coil.id;
         
-        this.scene.add(mesh);
-        this.coilMeshes.set(coil.id, mesh);
+        this.scene.add(grp);
+        this.coilMeshes.set(coil.id, grp);
     }
 
     updateCMesh(coil){
-        const mesh = this.coilMeshes.get(coil.id)
-        if (!mesh) return;
+        const grp = this.coilMeshes.get(coil.id)
+        if (!grp) return;
 
-        mesh.position.set(...coil.position);
-        mesh.rotation.y = THREE.MathUtils.degToRad(coil.angle);
+        this.scene.remove(grp)
 
-        let currrad = mesh.geometry.parameters.radius;
-        if (Math.abs(currrad - coil.radius) > 0.001){
-            mesh.geometry.dispose();
-            mesh.geometry = new THREE.TorusGeometry(coil.radius, GLOBALS.loopThickness, 16, 32);
-        }
+        grp.traverse(obj => {
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) obj.material.dispose();
+        })
+
+        this.coilMeshes.delete(coil.id)
+        this.createCMesh(coil)
     }
 
     updateCList() {
@@ -324,7 +341,7 @@ class Sim {
                 points: GLOBALS.gridPoints,
             }
 
-            const res = await fetch(SERVER_URL + '/simulate/', {
+            const res = await fetch('/api/simulate/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(reqD)
@@ -575,13 +592,15 @@ class Sim {
         
         // Raycast to find coil
         this.raycaster.setFromCamera(this.mouse, this.camera);
-        const intersects = this.raycaster.intersectObjects(Array.from(this.coilMeshes.values()));
+        const intersects = this.raycaster.intersectObjects(Array.from(this.coilMeshes.values()), true);
         
         if (intersects.length > 0) {
-            const mesh = intersects[0].object;
-            const coilId = mesh.userData.coilId;
+            const obj = intersects[0].object;
+            while (obj && !obj.userData.coilId) obj = obj.parent;
+            if (!obj) return;
+            const coilId = obj.userData.coilId;
             const coil = this.coils.find(c => c.id === coilId);
-            
+                        
             if (coil) {
                 this.isDrag = true;
                 this.selectC(coil);
@@ -657,6 +676,6 @@ document.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('beforeunload', () => {
     GLOBALS.sim.reset();
     var saved = JSON.parse(localStorage.getItem('saved_sims') || '[]');
-    saved.forEach(sim_id => fetch(SERVER_URL + `/simulate/${sim_id}/delete`, { method: 'POST' }))
+    saved.forEach(sim_id => fetch(`/api/simulate/${sim_id}/delete`, { method: 'POST' }))
     localStorage.removeItem('saved_sims');
 });
